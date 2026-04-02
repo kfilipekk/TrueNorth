@@ -1,0 +1,247 @@
+
+
+
+
+
+
+
+
+
+
+
+Competition Submission · Airbus Innovation Challenge 2026 · April 2026
+
+
+§SectionPage1Executive Proposal22State of the Art & Problem33Technical Architecture44Digital Technologies55Prototyping Plan66Technical Validity Assessment77Criticisms & Rebuttal98Proposed Improvements - Leveraging Existing Hardware119Sustainability Impact1310References14
+
+
+
+1.1 Proposal Title
+
+
+1.2 The Idea at a Glance
+TrueNorth is an onboard Edge-AI architecture designed to neutralise GPS/GNSS spoofing in commercial aviation. Acting as a dynamically weighted Extended Kalman Filter (EKF), it fuses data from multiple un-spoofable, physical signals of opportunity to continuously bound Inertial Measurement Unit (IMU) drift. It is intended for commercial airlines and aerospace manufacturers such as Airbus as an immediately retrofittable solution for electronically contested airspace.
+
+1.3 Who Should Use It and Why
+The system targets commercial airline operators, avionics OEMs (e.g. Honeywell, Collins Aerospace, Thales), and aviation regulators (EASA/FAA). The spoofing crisis has escalated from a niche concern to an industry-wide daily hazard. Over 1,500 commercial flights per day are now impacted, according to Honeywell estimates published in late 2025. Long-haul operators report that nearly 100% of Europe-to-Asia routes encounter GPS radio frequency interference. Pilots may not even realise they are being spoofed - the signal appears valid, corrupting the Flight Management System silently. TrueNorth provides a continuous, autonomous safety net that does not rely on any single point of failure.
+
+
+2.1 The Escalating Crisis
+GPS/GNSS spoofing in commercial aviation has grown from a curiosity to a systemic risk within just four years. Russia's 2022 invasion of Ukraine was the initial catalyst, driving proliferation of drone-denial spoofing technology across Eastern Europe. The phenomenon has since spread to the Middle East, South China Sea, Caribbean, and India. IATA data show a 220% increase in GPS signal loss events between 2021 and 2024, while OpsGroup estimates the rise as high as 500% over 2024 alone. From August 2023 to March 2024, more than 46,000 aircraft experienced GPS problems.
+In August 2024, a United Airlines flight from New Delhi was affected by spoofing originating near the Black Sea for the entire transatlantic crossing. In the same year, Finnair suspended flights to Tartu, Estonia, after repeated GPS outages made approaches impossible. ICAO issued a North Atlantic Operations Bulletin on navigation interference in early 2025, noting that 'the inability of the aircraft to recover in-flight leads to increased workload.' The European Commission President's aircraft was itself affected during an approach to Plovdiv, Bulgaria.
+
+2.2 Why Current Systems Fall Short
+The aviation industry's primary fallback is the Inertial Reference System (IRS), which uses ring laser gyros and accelerometers independent of any radio signal. While robust, the IRS suffers from integration drift at a rate of approximately one nautical mile per hour under pure-inertial dead reckoning. For a 14-hour transoceanic flight, this accumulates to a positional error of up to 14 NM - well outside acceptable navigation performance bounds for oceanic airspace (typically ±12.6 NM at 95% probability). The IRS also becomes problematic if GPS was used to initialise its hybrid mode before the spoofing attack began, potentially seeding a corrupted reference.
+
+Ground-based navaids (VOR/DME) provide a partial solution over land where coverage exists, and airlines already exploit DME/DME trilateration through the Flight Management System. However, DME coverage is absent over oceans, remote terrain, and in many non-Western airspaces. Quantum atomic clocks remain impractical for widespread deployment due to size, mass, and cost. Dual-frequency, multi-constellation GNSS receivers add resilience but can still be defeated by a sufficiently capable state-level actor broadcasting across multiple frequency bands. There is a clear gap for a solution that provides continuous, high-integrity positioning today - in any weather, over any terrain, without relying on single-frequency GPS.
+
+
+
+
+3.1 Core Concept: Dynamic Multi-Modal Fusion
+TrueNorth shifts the paradigm from static backup selection to dynamic, confidence-weighted sensor fusion. No single alternative sensor is universally reliable: SWIR stellar tracking fails in heavy cloud cover; terrain matching fails over oceans; LEO Doppler accuracy varies with satellite geometry. TrueNorth's Edge-AI engine continuously monitors environmental conditions and adjusts the trust placed in each sensing modality in real time.
+
+Sensing ModalityMechanismOptimal ConditionsFailure ConditionsSWIR Celestial TrackingImages stellar infrared signatures. Bypasses daytime atmospheric scatterin using 1000-2500 nm band.Clear sky, day or night.
+g10× more stars visible in SWIR than visible band.Dense cloud cover below
+~15,000 ft. Heavy volcanic ash.Radar Terrain MatchingCorrelates radar altimeter or SAR return against onboard SRTM topographic database.Overland flight, varied terrain. Improved accuracy with rugged terrain features.Featureless terrain (deserts, flat plains). Over water.LEO Doppler PositioningExtracts carrier-frequency Doppler shift of Starlink/Iridium signals (SoP navigation).Global coverage. 5,000+ satellites. Especially strong over oceans.Low satellite visibility angles. Very high receiver dynamics (manoeuvring flight).IRS Dead ReckoningRing laser gyros + accelerometers. Propagates last known good position forward.All conditions. True fallback. High short-term accuracy.Drift accumulates: ~1 NM/hr. Corrupt if GPS-seeded prior to spoofing onset.
+
+3.2 Spoofing Detection
+Before entering pure-backup mode, TrueNorth runs a spoofing detection layer. An initial integrity check compares incoming GPS/GNSS positions against the IRS-coasted 'dead reckoning' position. A sudden position jump of more than a configurable threshold (e.g. 5 NM) - or a GPS altitude discrepancy against barometric altitude - flags a spoofing event. This is consistent with existing Collins Aerospace SENTRI methodology, which uses staggered coasting solutions from the blended GNSS-inertial filter to detect deviations. Once detected, GPS measurements are discarded and TrueNorth's multi-modal fusion takes primary authority.
+
+
+
+
+4.1 Extended Kalman Filter Core
+The mathematical backbone of TrueNorth is an Extended Kalman Filter (EKF) - the industry-standard algorithm for optimal state estimation under nonlinear dynamics. The EKF maintains a probability distribution over the aircraft's position, velocity, and attitude. It fuses new sensor measurements by computing a gain that optimally balances the predicted state against new observations:
+K[k] = P[k]- * H^T * (H * P[k]- * H^T + R[k])^(-1)	
+The key innovation in TrueNorth is the dynamic adaptation of R[k] - the measurement noise covariance matrix. Rather than fixed noise parameters, an Edge-AI module infers the reliability of each sensor in real time. When the aircraft enters cloud cover, R[k] for the SWIR module is inflated (sensor distrusted). Simultaneously, R[k] for the LEO Doppler module is reduced (sensor trusted). This dynamic weighting is what makes TrueNorth more resilient than any static-priority backup architecture.
+
+4.2 Digital Signal Processing - LEO Doppler
+Signals of Opportunity (SoP) positioning exploits the Doppler frequency shift imposed on LEO satellite transmissions by relative motion between satellite and receiver. Because LEO satellites orbit at approximately 550 km (Starlink) compared to GPS at 20,200 km, their signals are approximately 20 dB stronger and their high orbital velocity produces large, easily measurable Doppler shifts. A software-defined radio (SDR) receiver on board can track these shifts and, combined with Two-Line Element (TLE) ephemeris data for satellite position, solve for the aircraft's position via the EKF.
+
+4.3 Computer Vision - SWIR Stellar Tracking
+SWIR cameras operating in the J/H-band (1.235-1.662 ?m) detect stellar infrared signatures suppressed by Rayleigh scattering in visible wavelengths. The sky background radiance is approximately 8× lower at these wavelengths compared to visible band, enabling detection of stars up to magnitude 7 during daytime flight at 16,500 ft - as demonstrated in SPIE 2025 proceedings. A star pattern recognition algorithm matches observed stellar positions against an onboard catalogue, providing an absolute position update to the EKF.
+
+4.4 Edge-AI Processing
+All computation runs on an onboard Edge-AI node, eliminating dependence on datalink or cloud connectivity (which could themselves be degraded or absent in contested airspace). Modern AI inference chips (e.g. NVIDIA Orin, Qualcomm Cloud AI) deliver the required throughput within a small form-factor, low-power envelope suitable for aircraft installation. The AI component handles: (a) environmental context classification (cloud height, terrain type, satellite geometry); (b) dynamic R[k] adaptation; and (c) anomaly detection for spoofing onset.
+
+
+
+
+Because TrueNorth is fundamentally a software-defined sensor fusion engine, it is highly prototypable without requiring full-scale aerospace hardware.
+
+5.1 Testbed Configuration
+A drone/rover testbed will carry: a commercial-grade IMU, a downward-facing optical sensor (simulating terrain matching), an upward-facing SWIR-band camera (simulating stellar tracking), and a software-defined radio receiver for LEO Doppler extraction. Active GPS drift injection via a GNSS signal simulator will replicate spoofing conditions on a known physical course.
+
+5.2 Evaluation Metrics
+
+
+
+
+
+rain change
+
+
+
+
+
+
+5.3 Digital Twin Visualisation
+A live telemetry dashboard will simultaneously display three tracks: the spoofed GPS path, the raw uncorrected IRS path, and the TrueNorth-corrected path. The dashboard will show real-time sensor weight percentages, demonstrating the dynamic logic of the EKF algorithm directly to the judging panel.
+
+
+
+
+Each core technical claim in the TrueNorth proposal has been assessed against peer-reviewed literature, patent databases, and industry publications. The following table summarises findings.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+The following section presents anticipated criticisms from technical reviewers and expert evaluators, paired with considered rebuttals.
+
+
+C1: 'Airlines already have IRS + DME/VOR. Why not just use those better?'
+
+
+C2: 'LEO Doppler positioning accuracy is insufficient for flight-critical navigation.'
+
+
+C3: 'Obtaining Starlink Doppler signals requires consent from SpaceX.'
+
+
+C4: 'SWIR celestial tracking requires a new, expensive, uncertified hardware component.'
+
+
+C5: 'Spoofing could corrupt the IRS itself, undermining the reference baseline.'
+
+
+C6: 'LEO satellite ephemeris (TLE files) have errors up to 3 km - how does this affect accuracy?'
+
+
+C7: 'The system adds cost, complexity, and weight - airlines won't adopt it.'
+
+
+
+
+
+
+IMP-1: Software-First DME/VOR Fusion (Immediate - No New Hardware)
+Problem / Gap:
+
+Every modern commercial airliner's FMS already scans up to five DME stations simultaneously and cross-checks VOR bearings. However, the existing fusion logic is relatively simple and does not use dynamic confidence weighting or AI-based consistency checking.
+Proposed Improvement:
+
+Propose a software update to the existing FMS that implements a proper EKF-based fusion of DME/DME + IRS, with AI-based sanity checking against GPS. This can be delivered as a field-loadable software update - no hardware installation required. Combined with multi-constellation GNSS receivers (GPS + Galileo + GLONASS + BeiDou), this significantly raises the bar for a successful spoofing attack that fools all systems simultaneously.
+
+
+IMP-2: Exploit Existing Terrain Databases + Radio Altimeter (No New Hardware)
+Problem / Gap:
+
+Commercial aircraft already carry an Enhanced Ground Proximity Warning System (EGPWS) with a global terrain database and a radio altimeter accurate to ±2 ft below 2,500 ft AGL. This is effectively a terrain-matching capability that is already installed.
+Proposed Improvement:
+
+TrueNorth should first exploit the EGPWS terrain database and existing radio altimeter in its terrain-matching modality, rather than proposing new Synthetic Aperture Radar hardware. The Honeywell EGPWS software upgrade programme already includes proposals to 'enable the system to apply alternative navigation architectures to forward-looking terrain functions.' This represents an industry-validated path to terrain-based navigation using existing hardware.
+
+IMP-3: Repurpose In-Flight WiFi Antenna for LEO Doppler (Low New Hardware)
+Problem / Gap:
+
+Many long-haul aircraft are now equipped with Ku-band or Ka-band phased array antennas for passenger in-flight connectivity via Starlink or Inmarsat. These antennas are already pointed at LEO satellites and receiving broadband signals.
+Proposed Improvement:
+
+The TrueNorth LEO Doppler module could be implemented as a secondary function of the existing in-flight WiFi hardware - essentially a software-defined radio running alongside the connectivity payload. Starlink's Ku-band downlink tones have been demonstrated as a viable Doppler positioning source. Airlines investing in Starlink connectivity (e.g. United, Delta, Qatar) would gain free navigation resilience as a bonus capability. This dramatically reduces the certification burden since the antenna hardware is already certified.
+
+
+IMP-4: Multi-Constellation GNSS as an Intermediate Step (Moderate Cost)
+Problem / Gap:
+
+A sophisticated state-level actor spoofing GPS L1/L2 may not simultaneously spoof Galileo E1/E5, GLONASS, and BeiDou signals, as each operates on different frequency bands with different signal structures. Dual-frequency multi-constellation receivers add meaningful resilience.
+Proposed Improvement:
+
+TrueNorth's architecture should explicitly incorporate multi-constellation GNSS cross-checking as its first line of defence. An aircraft receiving consistent positions from GPS, Galileo, and BeiDou simultaneously can detect spoofing of any single constellation by comparing solutions. This can be integrated into the EKF as additional measurement inputs with constellation-specific noise covariances.
+
+
+IMP-5: Retain SWIR Stellar Tracking - But Scope as Longer-Term Addition
+Problem / Gap:
+
+SWIR celestial tracking is technically validated by Sodern's Astradia system and multiple research programmes, and provides the highest-integrity absolute positioning of all proposed modalities. It is genuinely novel and differentiating.
+Proposed Improvement:
+
+Retain SWIR as a Tier-2 enhancement with a longer certification timeline. Frame it as the 'ultimate' addition after the software-based improvements (IMP-1 through IMP-4) are deployed. This staged approach lets TrueNorth deliver immediate value (pure software) while pursuing the most technically impressive capability as a medium-term roadmap item.
+
+IMP-6: ADS-B Cross-Check with Anomaly Detection
+Problem / Gap:
+
+ADS-B transmits aircraft position derived from GPS. If TrueNorth's fused position diverges significantly from the ADS-B-broadcast position, this is a spoofing indicator. However, ADS-B is itself GPS-dependent and could be broadcasting corrupted positions.
+Proposed Improvement:
+
+Use ADS-B as a mutual consistency check against nearby traffic rather than as an absolute position reference. If multiple aircraft in the same airspace show correlated position errors (all drifting in the same direction), this strongly suggests a shared spoofing event rather than individual system faults. This insight could be incorporated as a fleet-level intelligence layer, correlating anonymised positional data via ACARS or AOC datalink.
+
+
+
+
+Beyond flight safety, TrueNorth contributes meaningfully to aviation's sustainability targets through three mechanisms:
+
+Route Efficiency Preservation
+When GPS is lost or spoofed, ATC reverts to radar vectoring and older, less-optimal routing. Aircraft may be required to descend to lower altitudes where ground radar coverage is available, significantly increasing fuel burn due to denser air. TrueNorth maintains precise navigation authority regardless of GPS status, preserving fuel-optimised flight paths and cruising altitudes. For a single long-haul flight, suboptimal routing can add 200-500 kg of jet fuel.
+
+
+Reduced Diversions
+A spoofing-induced diversion to an alternate airport - with the associated go-around, extended flight time, and potential for a second departure - represents a significant and avoidable carbon event. TrueNorth eliminates the need for precautionary diversions due to navigation uncertainty.
+
+
+Supporting Sustainable Aviation Fuel (SAF) Route Planning
+Future precision navigation will underpin continuous descent approaches (CDA) and Required Navigation Performance approaches (RNP-AR) which save 150-300 kg of fuel per flight compared to radar-vectored step-down approaches. Maintaining navigation integrity in all conditions is a prerequisite for these SAF-maximising operations.
+
+
+
+
+The following sources were consulted in the preparation and technical validation of this proposal.
+
+[1] IATA / EASA, 'EASA and IATA Publish Comprehensive Plan to Mitigate the Risks of GNSS Interference,' Press Release, 18 June 2025. GPS signal loss events +220% between 2021-2024.
+
+[2] GPS World, 'GNSS Spoofing Threatens Airline Safety, Alarming Pilots and Aviation Officials,' October 2024. Reports >1,100 flights/day affected by Aug. 2024; United Airlines New Delhi incident.
+
+[3] Aireon, 'Observations of Trends in GPS Anomalies Affecting Aviation,' White Paper, May 2025. Six-month heatmap analysis of spoofing anomalies, conflict zone hotspots.
+
+[4] Honeywell Aerospace, 'In GPS Denial: Addressing the Jamming and Spoofing Challenge,' Blog, November 2025. >1,500 flights/day affected; IRS + DME hybrid navigation programme.
+
+[5] Aviation Week, 'Spoofing: A Clear and Present Danger for Airlines,' February 2026. ~100% of Europe-to-Asia flights encounter GNSS RFI; state-actor spoofing range.
+
+[6] Honeywell Aerospace, 'Spoofing and Jamming - Inertial Reference Systems,' Technical Blog. IRS ~1 NM/hr drift; FMS DME/DME fallback procedures; SENTRI-adjacent logic.
+
+[7] Collins Aerospace / Gleason et al., 'GNSS Radio Frequency Interference Mitigation in Collins Commercial Airborne Receivers,' MDPI Engineering Proceedings, 54(1):18, October 2023. SENTRI algorithm for spoofing detection using staggered IRS coasting solutions.
+
+[8] Nguyen et al., 'Low-Cost, Low-SWaP Day/Night Capable SWIR Star-Tracker for Terrestrial Navigation Applications,' SPIE Proceedings 13469, June 2025. Stars to magnitude 7 at 16,500 ft.
+
+[9] Sodern / ArianeGroup, 'Astradia Star Tracker,' Product Announcement, 2025. First commercial daylight stellar tracker; flight-tested on ATR42 aircraft.
+
+[10] NASA Glenn Research Center, Swank A.J., 'SWIR Star Tracking,' Technical Memorandum TM-20220007061. Sky background 8× lower in SWIR; InGaAs detector performance characterisation.
+
+[11] Neinavaie M. et al., 'Exploiting Starlink Signals for Navigation,' ION GNSS+ 2022. 10 m horizontal positioning error using 6 Starlink satellites.
+
+[12] Chen et al., 'Joint Pseudo-Range and Doppler Positioning Method with LEO Satellites' Signals of Opportunity,' Satellite Navigation, Springer Nature, May 2025. 3.6 m 2D / 6.2 m 3D using Starlink; 24 m with Iridium NEXT over 40 km baseline.
+
+[13] Khalife J. & Kassas Z., 'Navigation with Cellular CDMA Signals,' ION GNSS 2019. 358 m horizontal error with 2 ORBCOMM satellites - demonstrating early SoP feasibility.
+
+[14] Wikipedia / FAA, 'Distance Measuring Equipment.' Modern DME accuracy to 5 m using DME/DME trilateration; SESAR programme.
+
+[15] Wikipedia, 'Flight Management System.' Scanning DME, VOR, IRS triple-mix; FMS sensor logic.
+
+[16] Kozhaya S.E. & Kassas Z.M., 'Blind Doppler Tracking Framework,' IEEE VTC, June 2023. 5.3 m 3D static positioning using multi-constellation LEO SoP.
+
+[17] US Patent 11,079,234 (Trex Enterprises), 'High Precision Automated Celestial Navigation System,' Aug. 2021. SWIR/visible dual-band ACNS; 13 m longitude / 16 m latitude error demonstrated.
+
+
+
+
