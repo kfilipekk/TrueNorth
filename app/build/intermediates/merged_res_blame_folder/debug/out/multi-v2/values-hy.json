@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.truenorth.app-mergeDebugResources-41:/values-hy/values-hy.xml",
+            "outputFile": "com.truenorth.app-mergeDebugResources-43:/values-hy/values-hy.xml",
             "map": [
                 {
                     "source": "C:\\Users\\1kfil\\.gradle\\caches\\8.9\\transforms\\4589b0e3481092b9fe946d6414cb3fa8\\transformed\\play-services-base-18.5.0\\res\\values-hy\\values.xml",

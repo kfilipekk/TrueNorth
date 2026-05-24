@@ -6797,6 +6797,7 @@
     <style name="Theme.TrueNorth" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_cyan</item>
         <item name="android:statusBarColor">@color/brand_dark</item>
+        <item name="android:navigationBarColor">@color/brand_dark</item>
     </style>
     <style name="ThemeOverlay.AppCompat" parent="Base.ThemeOverlay.AppCompat"/>
     <style name="ThemeOverlay.AppCompat.ActionBar" parent="Base.ThemeOverlay.AppCompat.ActionBar"/>

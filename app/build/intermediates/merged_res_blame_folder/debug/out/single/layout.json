@@ -1,6 +1,26 @@
 [
     {
-        "merged": "com.truenorth.app-mergeDebugResources-42:/layout/activity_main.xml",
-        "source": "com.truenorth.app-main-45:/layout/activity_main.xml"
+        "merged": "com.truenorth.app-mergeDebugResources-44:/layout/fragment_log.xml",
+        "source": "com.truenorth.app-main-47:/layout/fragment_log.xml"
+    },
+    {
+        "merged": "com.truenorth.app-mergeDebugResources-44:/layout/fragment_radio.xml",
+        "source": "com.truenorth.app-main-47:/layout/fragment_radio.xml"
+    },
+    {
+        "merged": "com.truenorth.app-mergeDebugResources-44:/layout/fragment_info.xml",
+        "source": "com.truenorth.app-main-47:/layout/fragment_info.xml"
+    },
+    {
+        "merged": "com.truenorth.app-mergeDebugResources-44:/layout/fragment_map.xml",
+        "source": "com.truenorth.app-main-47:/layout/fragment_map.xml"
+    },
+    {
+        "merged": "com.truenorth.app-mergeDebugResources-44:/layout/activity_main.xml",
+        "source": "com.truenorth.app-main-47:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.truenorth.app-mergeDebugResources-44:/layout/fragment_analytics.xml",
+        "source": "com.truenorth.app-main-47:/layout/fragment_analytics.xml"
     }
 ]

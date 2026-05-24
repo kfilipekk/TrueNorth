@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.truenorth.app-mergeDebugResources-41:/values-sw360dp-v13/values-sw360dp-v13.xml",
+            "outputFile": "com.truenorth.app-mergeDebugResources-43:/values-sw360dp-v13/values-sw360dp-v13.xml",
             "map": [
                 {
                     "source": "C:\\Users\\1kfil\\.gradle\\caches\\8.9\\transforms\\af235a52e29591012288f7ab952ef771\\transformed\\preference-1.2.1\\res\\values-sw360dp-v13\\values-sw360dp-v13.xml",

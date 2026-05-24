@@ -43,4 +43,30 @@ class SensorFusionTest {
         
         assertTrue("Heading should approach 90 deg", ekf.headingDeg > 80.0 && ekf.headingDeg < 100.0)
     }
+
+    @Test
+    fun testAccelIntegration() {
+        // simulate a bike start (0 to 5m/s in 5 seconds)
+        val ekf = ExtendedKalmanFilter()
+        ekf.resetPosition(0.0, 0.0, 0.0, 0.0)
+        
+        val dt = 0.05
+        val constantAccel = 2.0 // 2 m/s^2 (strong bike start)
+        
+        for (i in 0 until 100) { 
+            ekf.predict(dt, 0.0)
+            
+            // updated engine logic
+            val deltaV = constantAccel * dt * 0.8
+            val predictedSpeed = (ekf.speed + deltaV).coerceAtLeast(0.0)
+            
+            // manually simulate the engine calling update with the hint
+            val H = Matrix(1, 5); H[0, 4] = 1.0
+            val speedR = Matrix.diagonal(doubleArrayOf(0.01))
+            ekf.kalmanUpdate(H, Matrix.fromVector(doubleArrayOf(predictedSpeed)), speedR)
+        }
+        
+        assertTrue("Speed should have increased to > 1.0 (current: ${ekf.speed})", ekf.speed > 1.0)
+        assertTrue("Position should have changed (current: ${ekf.north})", ekf.north > 2.0)
+    }
 }

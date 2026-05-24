@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.truenorth.app-mergeDebugResources-41:/values-hr/values-hr.xml",
+            "outputFile": "com.truenorth.app-mergeDebugResources-43:/values-hr/values-hr.xml",
             "map": [
                 {
                     "source": "C:\\Users\\1kfil\\.gradle\\caches\\8.9\\transforms\\3a204146c18cc7a551420345a5f6b4eb\\transformed\\core-1.12.0\\res\\values-hr\\values-hr.xml",

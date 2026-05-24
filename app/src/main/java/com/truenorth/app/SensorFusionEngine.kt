@@ -63,6 +63,12 @@ class SensorFusionEngine(private val listener: FusionListener) {
         private set
     private var demoStartMs = 0L
 
+    //spoofing simulation
+    var spoofingActive = false
+        private set
+    private var spoofNorthDrift = 0.0
+    private var spoofEastDrift  = 0.0
+
     //heading
     private var fusedHeading = 0.0
     private val COMP_ALPHA   = 0.97f
@@ -70,9 +76,18 @@ class SensorFusionEngine(private val listener: FusionListener) {
 
     //altitude
     private var initAltMSL = Double.NaN
+    private var baroBiasM = 0.0
 
     //imu drift
     private var imuOnlyStartMs = 0L
+
+    //vibration & acceleration tracking
+    private var vibrationLevel = 0.0
+    private var gravityVec = doubleArrayOf(0.0, 0.0, 9.81) //low-pass filtered gravity
+    private val GRAVITY_ALPHA = 0.95
+    private val ACCEL_BUFFER_SIZE = 20
+    private val accelMagBuffer = DoubleArray(ACCEL_BUFFER_SIZE)
+    private var accelBufferIdx = 0
 
     //path recording
     private val pathPoints = mutableListOf<PathPoint>()
@@ -85,28 +100,64 @@ class SensorFusionEngine(private val listener: FusionListener) {
     
     private val cellMonitor = CellSignalMonitor(context = (listener as android.content.Context))
     private val dataLogger = DataLogger(context = (listener as android.content.Context))
+    private val wifiMonitor = WifiSignalMonitor(context = (listener as android.content.Context))
 
     private val loopRunnable = object : Runnable {
         override fun run() {
-            if (tickCount == 0) dataLogger.startNewSession()
-            cellEstimate = cellMonitor.update()
+            if (tickCount == 0) {
+                dataLogger.startNewSession()
+                checkInternalPermissions()
+            }
+            
+            //updated diagnostic logging for physical hardware
+            val diagCell = cellMonitor.update()
+            cellEstimate = diagCell
+            
+            if (tickCount % 100 == 0) {
+                log("Cell: ${diagCell.visibleTowers} towers, best RSSI: ${diagCell.bestRssi} dBm", LogLevel.INFO)
+            }
+
             fusionTick()
             handler.postDelayed(this, UPDATE_INTERVAL_MS)
         }
     }
 
+    private fun checkInternalPermissions() {
+        val ctx = listener as android.content.Context
+        val fine = ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val phone = ctx.checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        log("Internal Check — Precise Location: $fine, Phone State: $phone", LogLevel.INFO)
+    }
+
     fun start() {
-        log("TrueNorth Engine v1.1 — EKF fusion initialised", LogLevel.SUCCESS)
+        log("TrueNorth Engine v1.2 — EKF + RF fusion initialised", LogLevel.SUCCESS)
+        wifiMonitor.start()
         handler.post(loopRunnable)
     }
 
     fun stop() {
         handler.removeCallbacks(loopRunnable)
+        wifiMonitor.stop()
         log("engine stopped")
     }
 
     fun onAccelerometer(values: FloatArray, timestampNs: Long) {
         accel = values.clone()
+        
+        //update low-pass gravity
+        gravityVec[0] = gravityVec[0] * GRAVITY_ALPHA + accel[0] * (1 - GRAVITY_ALPHA)
+        gravityVec[1] = gravityVec[1] * GRAVITY_ALPHA + accel[1] * (1 - GRAVITY_ALPHA)
+        gravityVec[2] = gravityVec[2] * GRAVITY_ALPHA + accel[2] * (1 - GRAVITY_ALPHA)
+
+        //update vibration buffer
+        val mag = Math.sqrt(accel[0].toDouble().pow(2) + accel[1].toDouble().pow(2) + accel[2].toDouble().pow(2))
+        accelMagBuffer[accelBufferIdx] = mag
+        accelBufferIdx = (accelBufferIdx + 1) % ACCEL_BUFFER_SIZE
+
+        //compute rolling variance (vibration level)
+        val mean = accelMagBuffer.average()
+        vibrationLevel = accelMagBuffer.map { (it - mean).pow(2) }.average()
+
         stepDetector.processSample(values[0], values[1], values[2], timestampNs / 1_000_000)
     }
 
@@ -131,21 +182,43 @@ class SensorFusionEngine(private val listener: FusionListener) {
     }
 
     fun onGpsLocation(location: Location, satellites: Int) {
-        if (demoActive && System.currentTimeMillis() - demoStartMs > 4_000L) return
-        
+        //ALWAYS record actual raw GPS to allow ground-truth analysis in research logs
         rawGpsLat = location.latitude
         rawGpsLon = location.longitude
         rawGpsAlt = location.altitude
 
+        //if JAMMING mode is active, ignore these updates after a short grace period
+        if (demoActive && System.currentTimeMillis() - demoStartMs > 4_000L) return
+        
+        var lat = location.latitude
+        var lon = location.longitude
+
+        //inject spoofing drift (moving user away from real position)
+        if (spoofingActive) {
+            spoofNorthDrift += 0.5 
+            spoofEastDrift  += 0.2
+            val r = 6_371_000.0
+            lat += Math.toDegrees(spoofNorthDrift / r)
+            lon += Math.toDegrees(spoofEastDrift / (r * cos(Math.toRadians(lat))))
+        }
+
         if (gpsOriginLat.isNaN()) {
-            gpsOriginLat = location.latitude
-            gpsOriginLon = location.longitude
+            gpsOriginLat = lat
+            gpsOriginLon = lon
             gpsOriginAlt = location.altitude
             initAltMSL = location.altitude
+            
+            //calibrate barometer bias against first GPS fix
+            if (hasBaro) {
+                val rawBaroAlt = pressureToAltitudeMSL(pressurePa.toDouble())
+                baroBiasM = location.altitude - rawBaroAlt
+                log("BARO: Calibrated bias to ${baroBiasM.toInt()}m", LogLevel.SUCCESS)
+            }
+
             ekf.resetPosition(0.0, 0.0, location.altitude, fusedHeading)
         }
 
-        val (n, e) = toLocal(location.latitude, location.longitude)
+        val (n, e) = toLocal(lat, lon)
 
         if (!prevGpsNorth.isNaN()) {
             val jump = sqrt((n - prevGpsNorth).pow(2) + (e - prevGpsEast).pow(2))
@@ -162,7 +235,7 @@ class SensorFusionEngine(private val listener: FusionListener) {
         lastGpsTimeMs = System.currentTimeMillis()
         gpsSatCount  = satellites
 
-        val gpsPt = PathPoint(n, e, location.altitude, location.time, mode, location.accuracy.toDouble(), true)
+        val gpsPt = PathPoint(n, e, location.altitude, location.time, mode, location.accuracy.toDouble(), true, lat, lon)
         gpsActualPoints.add(gpsPt)
         listener.onPathPoint(gpsPt)
 
@@ -179,6 +252,14 @@ class SensorFusionEngine(private val listener: FusionListener) {
         demoActive    = true
         demoStartMs   = System.currentTimeMillis()
         imuOnlyStartMs = System.currentTimeMillis()
+        
+        //if we don't have a starting position, set a dummy one in Cambridge
+        if (gpsOriginLat.isNaN()) {
+            gpsOriginLat = 52.1983; gpsOriginLon = 0.1205
+            initAltMSL = 20.0; baroBiasM = 0.0
+            ekf.resetPosition(0.0, 0.0, 20.0, fusedHeading)
+        }
+
         log("JAMMING DETECTED — Switching to TrueNorth Mode", LogLevel.WARN)
     }
 
@@ -187,10 +268,33 @@ class SensorFusionEngine(private val listener: FusionListener) {
         log("JAMMING CLEARED — GPS Lock restored", LogLevel.SUCCESS)
     }
 
+    fun activateSpoofingSimulation() {
+        spoofingActive = true
+        spoofNorthDrift = 0.0
+        spoofEastDrift = 0.0
+        log("SPOOFING ATTACK INITIATED — Injecting GPS drift", LogLevel.ERROR)
+    }
+
+    fun deactivateSpoofingSimulation() {
+        spoofingActive = false
+        log("SPOOFING CLEARED — GPS Integrity restored", LogLevel.SUCCESS)
+    }
+
     private fun fusionTick() {
         val dt = UPDATE_INTERVAL_MS / 1000.0
         val magHeading = computeMagHeading()
         val gyroZ = if (hasGyro) gyro[2].toDouble() else 0.0
+        
+        //spoofing detection logic
+        if (spoofingActive) {
+            val imuSpeed = sqrt(accel[0].pow(2) + accel[1].pow(2) + accel[2].pow(2)) - 9.81
+            //if gps is moving but imu is stationary, flag integrity alert
+            if (ekf.speed > 2.0 && abs(imuSpeed) < 0.05) {
+                if (tickCount % 40 == 0) {
+                    log("SPOOF ALERT: GPS movement detected without IMU confirmation", LogLevel.ERROR)
+                }
+            }
+        }
 
         if (!headingInitialised && magHeading != null) {
             fusedHeading = magHeading
@@ -210,12 +314,54 @@ class SensorFusionEngine(private val listener: FusionListener) {
         ekf.predict(dt, gyroZ)
 
         if (hasBaro && !initAltMSL.isNaN()) {
-            val altMSL = pressureToAltitudeMSL(pressurePa.toDouble())
+            val altMSL = pressureToAltitudeMSL(pressurePa.toDouble()) + baroBiasM
             ekf.updateBarometer(altMSL)
         }
 
-        if (cellEstimate.confidence > 0.15f && cellEstimate.speedHintMps > 0.05) {
+        //cell doppler speed hints
+        if (cellEstimate.confidence > 0.05f && cellEstimate.speedHintMps > 0.05) {
             ekf.updateCellSpeedHint(cellEstimate.speedHintMps)
+        }
+
+        //wifi position updates (secondary fix)
+        val wifiFix = wifiMonitor.getWifiPositionEstimate()
+        if (wifiFix != null && mode != NavigationMode.GPS_LOCK) {
+            val (coords, accuracy) = wifiFix
+            val (north, east) = toLocal(coords[0], coords[1])
+            ekf.updateWifiFix(north, east, accuracy)
+            
+            if (tickCount % 200 == 0) {
+                log("RF: Wi-Fi position fix acquired (±%.1fm)".format(accuracy), LogLevel.INFO)
+            }
+        }
+
+        //fallback velocity logic for smooth motion (e.g. bike)
+        if (mode == NavigationMode.TRUENORTH) {
+            //estimate linear acceleration by subtracting gravity vector
+            val linX = accel[0] - gravityVec[0]
+            val linY = accel[1] - gravityVec[1]
+            val linZ = accel[2] - gravityVec[2]
+            
+            //horizontal linear acceleration (assuming device is relatively level or gravity points 'down')
+            //more robust: project onto horizontal plane
+            val linMag = Math.sqrt(linX.pow(2) + linY.pow(2) + linZ.pow(2))
+            
+            //direction check: if we're moving, linear accel should be mostly positive in some frame
+            //refine: use a larger bias for cycling on bumpy roads to prevent noise integration
+            val bias = if (vibrationLevel > 0.3) 0.1 else 0.03
+            val linearAccel = (linMag - bias).coerceAtLeast(0.0) 
+            
+            if (linearAccel > 0.05) {
+                //scale speed hint noise based on vibration: higher vibration -> much higher R
+                val rValue = 0.05 + vibrationLevel * 2.0
+                
+                val deltaV = linearAccel * dt * 0.8
+                val predictedSpeed = (ekf.speed + deltaV).coerceAtLeast(0.0)
+                
+                if (predictedSpeed > 0.1 || deltaV > 0.01) {
+                    ekf.updateCellSpeedHint(predictedSpeed, rValue)
+                }
+            }
         }
 
         updateMode()
@@ -224,18 +370,20 @@ class SensorFusionEngine(private val listener: FusionListener) {
         val telemetry = buildTelemetry()
         listener.onTelemetryUpdate(telemetry)
         
-        if (tickCount % 20 == 0) {
-            dataLogger.log(telemetry, this)
-        }
+        //record high-fidelity csv telemetry every tick (20Hz)
+        dataLogger.log(telemetry, this)
 
         if (tickCount % 10 == 0) {
+            val (curLat, curLon) = toGlobal(ekf.north, ekf.east)
             val pt = PathPoint(
                 northM       = ekf.north,
                 eastM        = ekf.east,
                 altM         = ekf.altitude,
                 timestamp    = System.currentTimeMillis(),
                 mode         = mode,
-                uncertaintyM = ekf.positionUncertaintyM()
+                uncertaintyM = ekf.positionUncertaintyM(),
+                lat = curLat,
+                lon = curLon
             )
             pathPoints.add(pt)
             listener.onPathPoint(pt)
@@ -310,6 +458,11 @@ class SensorFusionEngine(private val listener: FusionListener) {
 
         val altDelta = if (initAltMSL.isNaN()) 0.0 else ekf.altitude - initAltMSL
 
+        val (curLat, curLon) = toGlobal(ekf.north, ekf.east)
+        val (gpsN, gpsE) = toLocal(rawGpsLat, rawGpsLon)
+        
+        val cellData = cellMonitor.update()
+
         return TelemetryData(
             northingM          = ekf.north,
             eastingM           = ekf.east,
@@ -324,13 +477,33 @@ class SensorFusionEngine(private val listener: FusionListener) {
             imuDriftMs         = imuDriftMs,
             mode               = mode,
             confidence         = computeConfidence(),
-            visibleCells       = cellEstimate.visibleTowers,
-            bestCellRssi       = cellEstimate.bestRssi,
+            visibleCells       = cellData.visibleTowers,
+            bestCellRssi       = cellData.bestRssi,
             gpsAccuracyM       = lastGpsAcc,
             gpsSatellites      = gpsSatCount,
             timestamp          = System.currentTimeMillis(),
             ekfStateX          = ekf.getStateX(),
-            ekfCovP            = ekf.getCovP()
+            ekfCovP            = ekf.getCovP(),
+            rawSensors         = RawSensorSnapshot(
+                accelMps2 = accel.clone(),
+                gyroRps   = gyro.clone(),
+                magUt     = mag.clone(),
+                pressurePa = pressurePa,
+                hasMag    = hasMag,
+                hasGyro   = hasGyro,
+                hasBaro   = hasBaro
+            ),
+            vibrationLevel = vibrationLevel,
+            cadenceHz = stepDetector.cadenceHz(),
+            stepLengthM = stepDetector.getLastStepLength(),
+            baroResidualM = ekf.getBaroResidual(),
+            magResidualDeg = ekf.getMagResidual(),
+            wifiScans = wifiMonitor.getScanCount(),
+            bestWifiRssi = wifiMonitor.getBestRssi(),
+            lat = curLat,
+            lon = curLon,
+            gpsNorthingM = gpsN,
+            gpsEastingM = gpsE
         )
     }
 
@@ -392,6 +565,4 @@ class SensorFusionEngine(private val listener: FusionListener) {
         val lon = gpsOriginLon + Math.toDegrees(east / (r * cos(Math.toRadians(gpsOriginLat))))
         return Pair(lat, lon)
     }
-
-    private val Double.f1 get() = "%.1f".format(this)
 }

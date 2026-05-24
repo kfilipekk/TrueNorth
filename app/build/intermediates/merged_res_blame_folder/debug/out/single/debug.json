@@ -1,38 +1,82 @@
 [
     {
-        "merged": "com.truenorth.app-merged_res-43:/mipmap_ic_launcher_round.xml.flat",
-        "source": "com.truenorth.app-main-45:/mipmap/ic_launcher_round.xml"
+        "merged": "com.truenorth.app-merged_res-45:/layout_activity_main.xml.flat",
+        "source": "com.truenorth.app-main-47:/layout/activity_main.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/drawable_ic_jamming_off.xml.flat",
-        "source": "com.truenorth.app-main-45:/drawable/ic_jamming_off.xml"
+        "merged": "com.truenorth.app-merged_res-45:/mipmap_ic_launcher_round.xml.flat",
+        "source": "com.truenorth.app-main-47:/mipmap/ic_launcher_round.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/drawable_ic_launcher_foreground.xml.flat",
-        "source": "com.truenorth.app-main-45:/drawable/ic_launcher_foreground.xml"
+        "merged": "com.truenorth.app-merged_res-45:/layout_fragment_info.xml.flat",
+        "source": "com.truenorth.app-main-47:/layout/fragment_info.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/drawable_ic_jamming_on.xml.flat",
-        "source": "com.truenorth.app-main-45:/drawable/ic_jamming_on.xml"
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_info.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_info.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/mipmap_ic_launcher.xml.flat",
-        "source": "com.truenorth.app-main-45:/mipmap/ic_launcher.xml"
+        "merged": "com.truenorth.app-merged_res-45:/layout_fragment_log.xml.flat",
+        "source": "com.truenorth.app-main-47:/layout/fragment_log.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/layout_activity_main.xml.flat",
-        "source": "com.truenorth.app-main-45:/layout/activity_main.xml"
+        "merged": "com.truenorth.app-merged_res-45:/layout_fragment_map.xml.flat",
+        "source": "com.truenorth.app-main-47:/layout/fragment_map.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
-        "source": "com.truenorth.app-main-45:/mipmap-anydpi-v26/ic_launcher_round.xml"
+        "merged": "com.truenorth.app-merged_res-45:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.truenorth.app-main-47:/mipmap-anydpi-v26/ic_launcher.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/drawable_ic_launcher_background.xml.flat",
-        "source": "com.truenorth.app-main-45:/drawable/ic_launcher_background.xml"
+        "merged": "com.truenorth.app-merged_res-45:/menu_bottom_nav_menu.xml.flat",
+        "source": "com.truenorth.app-main-47:/menu/bottom_nav_menu.xml"
     },
     {
-        "merged": "com.truenorth.app-merged_res-43:/mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "com.truenorth.app-main-45:/mipmap-anydpi-v26/ic_launcher.xml"
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_jamming_on.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_jamming_on.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_jamming_off.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_jamming_off.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.truenorth.app-main-47:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/mipmap_ic_launcher.xml.flat",
+        "source": "com.truenorth.app-main-47:/mipmap/ic_launcher.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_map.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_map.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_log.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_log.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_radio.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_radio.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/drawable_ic_analytics.xml.flat",
+        "source": "com.truenorth.app-main-47:/drawable/ic_analytics.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/layout_fragment_analytics.xml.flat",
+        "source": "com.truenorth.app-main-47:/layout/fragment_analytics.xml"
+    },
+    {
+        "merged": "com.truenorth.app-merged_res-45:/layout_fragment_radio.xml.flat",
+        "source": "com.truenorth.app-main-47:/layout/fragment_radio.xml"
     }
 ]
