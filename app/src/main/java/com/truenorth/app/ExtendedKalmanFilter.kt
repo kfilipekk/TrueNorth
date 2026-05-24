@@ -88,23 +88,34 @@ class ExtendedKalmanFilter {
         0.04          //speed
     ))
 
-    //process noise Q
-    //tuned for pixel 7 pro high-grade imu
-    private val Q = Matrix.diagonal(doubleArrayOf(
-        0.001, 0.001, //position noise
-        0.0002,       //altitude noise
-        0.0005,       //heading noise
-        0.005         //speed variability
-    ))
+    // Process noise Q (per second; scaled by dt in predict)
+    // Tuned for Pixel 7 Pro high-grade IMU (Bosch/TDK suite)
+    private var baseQ = doubleArrayOf(
+        0.001, 0.001, // Position noise
+        0.0002,       // Altitude noise
+        0.0005,       // Heading noise
+        0.005         // Speed variability
+    )
 
-    //measurement noise matrices
+    private fun getQ(motionLevel: Double): Matrix {
+        // scale position noise up when moving fast to allow more filter flexibility
+        val scale = (1.0 + motionLevel).coerceIn(1.0, 10.0)
+        return Matrix.diagonal(doubleArrayOf(
+            baseQ[0] * scale, baseQ[1] * scale,
+            baseQ[2],
+            baseQ[3],
+            baseQ[4]
+        ))
+    }
+
+    // measurement noise matrices
     private val R_baro  = Matrix.diagonal(doubleArrayOf(0.25))
     private val R_mag   = Matrix.diagonal(doubleArrayOf(0.04))
     private val R_step  = Matrix.diagonal(doubleArrayOf(0.04))
     private val R_cell  = Matrix.diagonal(doubleArrayOf(0.25))
     private val R_gps2d = Matrix.diagonal(doubleArrayOf(1.0, 1.0))
 
-    //public accessors
+    // public accessors
     val north    get() = x[I_N, 0]
     val east     get() = x[I_E, 0]
     val altitude get() = x[I_A, 0]
@@ -120,31 +131,41 @@ class ExtendedKalmanFilter {
     fun getStateX(): DoubleArray = x.toVector()
     fun getCovP(): DoubleArray = DoubleArray(DIM) { P[it, it] }
 
-    //predict step
+    private var lastBaroResidual = 0.0
+    private var lastMagResidual = 0.0
+
+    fun getBaroResidual() = lastBaroResidual
+    fun getMagResidual() = lastMagResidual
+
+    // predict step
     fun predict(dt: Double, gyroZRps: Double) {
         val h = x[I_H, 0]
         val v = x[I_V, 0]
 
-        //non-linear propagation
+        // non-linear propagation
         x[I_N, 0] += v * cos(h) * dt
         x[I_E, 0] += v * sin(h) * dt
         x[I_H, 0] = wrapAngle(h + gyroZRps * dt)
-        x[I_V, 0] *= 0.995  //prevent velocity explosion
+        
+        // velocity decay: slightly slower when we have a heading lock
+        val decay = if (abs(gyroZRps) < 0.01) 0.998 else 0.99
+        x[I_V, 0] *= decay
 
-        //jacobian F
+        // jacobian F
         val F = Matrix.identity(DIM)
         F[I_N, I_H] = -v * sin(h) * dt
         F[I_N, I_V] =  cos(h)     * dt
         F[I_E, I_H] =  v * cos(h) * dt
         F[I_E, I_V] =  sin(h)     * dt
-        F[I_V, I_V] = 0.995
+        F[I_V, I_V] = decay
 
-        //P = FPF' + Q*dt
-        P = F * P * F.T() + Q * dt
+        // P = FPF' + Q*dt
+        P = F * P * F.T() + getQ(v) * dt
     }
 
     //measurement updates
     fun updateBarometer(altitudeMeasuredM: Double) {
+        lastBaroResidual = altitudeMeasuredM - x[I_A, 0]
         val H = Matrix(1, DIM); H[0, I_A] = 1.0
         kalmanUpdate(H, Matrix.fromVector(doubleArrayOf(altitudeMeasuredM)), R_baro)
     }
@@ -152,6 +173,7 @@ class ExtendedKalmanFilter {
     fun updateMagnetometer(headingMeasuredRad: Double) {
         val H = Matrix(1, DIM); H[0, I_H] = 1.0
         val innov = wrapAngle(headingMeasuredRad - x[I_H, 0])
+        lastMagResidual = Math.toDegrees(innov)
         val z = Matrix.fromVector(doubleArrayOf(x[I_H, 0] + innov))
         kalmanUpdate(H, z, R_mag)
         x[I_H, 0] = wrapAngle(x[I_H, 0])
@@ -163,36 +185,57 @@ class ExtendedKalmanFilter {
         x[I_V, 0] = x[I_V, 0].coerceAtLeast(0.0)
     }
 
-    fun updateCellSpeedHint(speedMps: Double) {
-        if (speedMps < 0.05) return
+    fun updateCellSpeedHint(speedMps: Double, rValue: Double = 0.01) {
+        if (speedMps < 0.01 && x[I_V, 0] < 0.05) return
         val H = Matrix(1, DIM); H[0, I_V] = 1.0
-        kalmanUpdate(H, Matrix.fromVector(doubleArrayOf(speedMps)), R_cell)
+        // use provided or default measurement noise
+        val speedR = Matrix.diagonal(doubleArrayOf(rValue))
+        kalmanUpdate(H, Matrix.fromVector(doubleArrayOf(speedMps)), speedR)
         x[I_V, 0] = x[I_V, 0].coerceAtLeast(0.0)
     }
 
     fun updateGps2D(northM: Double, eastM: Double, accuracyM: Float) {
+        //innovation check for spoofing detection
+        val h = Matrix(2, DIM); h[0, I_N] = 1.0; h[1, I_E] = 1.0
+        val y = Matrix(2, 1); y[0, 0] = northM; y[1, 0] = eastM
+        val innovation = y - h * x
+        val innovDist = sqrt(innovation[0, 0].pow(2) + innovation[1, 0].pow(2))
+        
+        //if innovation is too high (e.g. > 50m jump), downweight this update significantly
+        val trustScale = if (innovDist > 50.0) 100.0 else 1.0
+        updatePosition2D(northM, eastM, accuracyM, R_gps2d * trustScale)
+    }
+
+    fun updateWifiFix(northM: Double, eastM: Double, accuracyM: Float) {
+        // wifi is usually less trusted than gps, but more than pure imu
+        val R_wifi = Matrix.diagonal(doubleArrayOf(25.0, 25.0)) 
+        updatePosition2D(northM, eastM, accuracyM, R_wifi)
+    }
+
+    private fun updatePosition2D(northM: Double, eastM: Double, accuracyM: Float, baseR: Matrix) {
         val H = Matrix(2, DIM)
         H[0, I_N] = 1.0; H[1, I_E] = 1.0
         val z = Matrix(2, 1); z[0, 0] = northM; z[1, 0] = eastM
         val scale = (accuracyM.toDouble() / 3.0).pow(2).coerceIn(0.1, 100.0)
-        val R_scaled = R_gps2d * scale
+        val R_scaled = baseR * scale
         kalmanUpdate(H, z, R_scaled)
     }
 
-    //generic ekf update
-    private fun kalmanUpdate(H: Matrix, z: Matrix, R: Matrix) {
-        val y = z - H * x               //innovation
-        val S = H * P * H.T() + R       //innovation covariance
-        val K = P * H.T() * S.inverse() //kalman gain
-        x = x + K * y                   //state update
+    // generic ekf update
+    fun kalmanUpdate(H: Matrix, z: Matrix, R: Matrix) {
+        val y = z - H * x               // innovation
+        val S = H * P * H.T() + R       // innovation covariance
         
-        //joseph form for numerical stability
+        // joseph form for numerical stability
+        val K = P * H.T() * S.inverse() // kalman gain
+        x = x + K * y                   // state update
+
         val I = Matrix.identity(DIM)
         val I_KH = I - K * H
         P = I_KH * P * I_KH.T() + K * R * K.T()
     }
 
-    //resets
+    // resets
     fun resetPosition(north: Double, east: Double, alt: Double, heading: Double) {
         x[I_N, 0] = north
         x[I_E, 0] = east

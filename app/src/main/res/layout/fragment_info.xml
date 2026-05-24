@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#070D1A"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TrueNorth Walking EFB"
+            android:textColor="#00FF88"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="High-Integrity Navigation Prototype"
+            android:textColor="#00D4FF"
+            android:textSize="14sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="#44FFFFFF" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="System Architecture"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="• EKF: 5-state Extended Kalman Filter (N, E, Alt, H, V)\n• Joseph-form covariance updates for numerical stability\n• Sensor Fusion: IMU (Bosch/TDK), Barometer, Cell Doppler\n• Weinberg Step Detection for walking gait tracking\n• Adaptive linear acceleration integration for non-step motion"
+            android:textColor="#BBBBBB"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Hardware Targets"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Optimised for Pixel 7 Pro with high-grade internal IMU and barometric sensors. Minimal hardware drift ensures reliable track-holding during long-duration (20min+) GPS-denied environments."
+            android:textColor="#BBBBBB"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Analytics Dashboard"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="• Real-time EKF state evolution plotting\n• Speed/Vibration correlation metrics\n• Sensor residual monitoring (Baro/Mag Innovation)\n• Gait biomechanical analytics (Cadence, Step Gain)"
+            android:textColor="#BBBBBB"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Troubleshooting Signal"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/txtSignalTrouble"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="If 'Tower Identity Blocked' appears:\n1. Ensure 'Precise Location' is ON in Android Settings.\n2. Set Location access to 'Allow all the time' (required for background tower scans).\n3. Enable Wi-Fi &amp; Bluetooth Scanning in 'Location Services'."
+            android:textColor="#FFB300"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="80dp" />
+
+    </LinearLayout>
+</ScrollView>

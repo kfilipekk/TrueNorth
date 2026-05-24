@@ -12,44 +12,42 @@ import android.location.LocationManager
 import android.os.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.preference.PreferenceManager
+import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.google.android.gms.location.*
 import com.google.android.material.button.MaterialButton
 import com.truenorth.app.databinding.ActivityMainBinding
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polyline
 
-class MainActivity : AppCompatActivity(), FusionListener, SensorEventListener {
+class MainActivity : AppCompatActivity(), FusionListener, SensorEventListener, MapFragment.MapInteractionListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var engine: SensorFusionEngine
     private lateinit var sensorManager: SensorManager
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var vibrator: Vibrator
+    private lateinit var viewModel: TrueNorthViewModel
     
-    private var posMarker: Marker? = null
-    private val predictedPathLine = Polyline()
-    private val actualPathLine = Polyline()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        //osmdroid config
+        viewModel = ViewModelProvider(this)[TrueNorthViewModel::class.java]
+        
         Configuration.getInstance().userAgentValue = packageName
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this))
         
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupMap()
+        setupViewPager()
+        
         engine = SensorFusionEngine(this)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         
-        vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
         } else {
@@ -57,70 +55,131 @@ class MainActivity : AppCompatActivity(), FusionListener, SensorEventListener {
             getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
 
-        setupSimControls()
-        binding.btnForceStart.setOnClickListener {
-            onLog(LogEntry(System.currentTimeMillis(), "GPS: Manual initialisation", LogLevel.WARN))
-            val fallback = Location(LocationManager.GPS_PROVIDER).apply {
-                latitude = 37.421998; longitude = -122.084000; altitude = 0.0; accuracy = 10f; time = System.currentTimeMillis()
-            }
-            engine.onGpsLocation(fallback, 0)
-        }
         checkPermissions()
     }
 
-    private fun setupMap() {
-        binding.map.setTileSource(TileSourceFactory.MAPNIK)
-        binding.map.setMultiTouchControls(true)
-        binding.map.controller.setZoom(18.0)
-        
-        //predicted path (truenorth) - cyan
-        predictedPathLine.outlinePaint.color = android.graphics.Color.parseColor("#00D4FF")
-        predictedPathLine.outlinePaint.strokeWidth = 6f
-        binding.map.overlays.add(predictedPathLine)
-        
-        //actual path (gps) - magenta
-        actualPathLine.outlinePaint.color = android.graphics.Color.parseColor("#FF00FF")
-        actualPathLine.outlinePaint.strokeWidth = 4f
-        actualPathLine.outlinePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 10f), 0f)
-        binding.map.overlays.add(actualPathLine)
-    }
-
-    private fun setupSimControls() {
-        val btn = binding.btnJamming as MaterialButton
-        btn.setOnClickListener {
-            vibrate(50) //tactical feedback
-            if (engine.demoActive) {
-                engine.deactivateDemoMode()
-                btn.text = "JAM GPS"
-                btn.setIconResource(R.drawable.ic_jamming_off)
-                btn.iconTint = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#00FF88"))
-                btn.setTextColor(android.graphics.Color.parseColor("#00FF88"))
-            } else {
-                engine.activateDemoMode()
-                btn.text = "STOP JAM"
-                btn.setIconResource(R.drawable.ic_jamming_on)
-                btn.iconTint = android.content.res.ColorStateList.valueOf(android.graphics.Color.RED)
-                btn.setTextColor(android.graphics.Color.RED)
+    private fun setupViewPager() {
+        binding.viewPager.adapter = object : FragmentStateAdapter(this) {
+            override fun getItemCount(): Int = 5
+            override fun createFragment(position: Int): Fragment {
+                return when (position) {
+                    0 -> MapFragment()
+                    1 -> AnalyticsFragment()
+                    2 -> RadioFragment()
+                    3 -> LiveLogFragment()
+                    else -> InfoFragment()
+                }
             }
+        }
+        binding.viewPager.isUserInputEnabled = false
+        binding.viewPager.offscreenPageLimit = 4 // Keep all tabs alive to prevent re-creation crashes
+        
+        binding.bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_map -> binding.viewPager.setCurrentItem(0, false)
+                R.id.nav_analytics -> binding.viewPager.setCurrentItem(1, false)
+                R.id.nav_radio -> binding.viewPager.setCurrentItem(2, false)
+                R.id.nav_log -> binding.viewPager.setCurrentItem(3, false)
+                R.id.nav_info -> binding.viewPager.setCurrentItem(4, false)
+            }
+            true
         }
     }
 
+    override fun onJammingClicked() {
+        vibrate(50)
+        val mapFrag = supportFragmentManager.fragments.filterIsInstance<MapFragment>().firstOrNull() ?: return
+        val btn = mapFrag.binding.btnJamming as MaterialButton
+        if (engine.demoActive) {
+            engine.deactivateDemoMode()
+            btn.text = "JAM GPS"
+            btn.setIconResource(R.drawable.ic_jamming_off)
+            btn.iconTint = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#00FF88"))
+            btn.setTextColor(android.graphics.Color.parseColor("#00FF88"))
+        } else {
+            engine.activateDemoMode()
+            btn.text = "STOP JAM"
+            btn.setIconResource(R.drawable.ic_jamming_on)
+            btn.iconTint = android.content.res.ColorStateList.valueOf(android.graphics.Color.RED)
+            btn.setTextColor(android.graphics.Color.RED)
+        }
+    }
+
+    override fun onSpoofingClicked() {
+        vibrate(100) //heavier tactile for alert
+        val mapFrag = supportFragmentManager.fragments.filterIsInstance<MapFragment>().firstOrNull() ?: return
+        val btn = mapFrag.binding.btnSpoofing
+        if (engine.spoofingActive) {
+            engine.deactivateSpoofingSimulation()
+            btn.text = "SIM SPOOF"
+            btn.setTextColor(android.graphics.Color.parseColor("#FF4444"))
+        } else {
+            engine.activateSpoofingSimulation()
+            btn.text = "STOP SPOOF"
+            btn.setTextColor(android.graphics.Color.YELLOW)
+        }
+    }
+
+    override fun onForceStartClicked() {
+        onLog(LogEntry(System.currentTimeMillis(), "GPS: Manual initialisation", LogLevel.WARN))
+        val fallback = Location(LocationManager.GPS_PROVIDER).apply {
+            latitude = 37.421998; longitude = -122.084000; altitude = 0.0; accuracy = 10f; time = System.currentTimeMillis()
+        }
+        engine.onGpsLocation(fallback, 0)
+    }
+
     private fun checkPermissions() {
-        val permissions = mutableListOf(
+        val basePermissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.BODY_SENSORS,
             Manifest.permission.ACTIVITY_RECOGNITION,
             Manifest.permission.READ_PHONE_STATE
         )
         
-        //background location for long walks
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        // Wifi permissions are not runtime on all versions but good to have
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            basePermissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
 
-        if (permissions.any { ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }) {
-            ActivityCompat.requestPermissions(this, permissions.toTypedArray(), 1)
+        val missing = basePermissions.filter { 
+            ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
+        }
+
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), 100)
         } else {
+            checkBackgroundLocation()
+        }
+    }
+
+    private fun checkBackgroundLocation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // Background location must be requested separately on Android 11+
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), 101)
+                return
+            }
+        }
+        startNavigation()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 100) {
+            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                checkBackgroundLocation()
+            } else {
+                onLog(LogEntry(System.currentTimeMillis(), "Permissions: Core permissions denied. Radio/GPS may fail.", LogLevel.ERROR))
+                // start anyway, try to recover
+                checkBackgroundLocation()
+            }
+        } else if (requestCode == 101) {
+            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                onLog(LogEntry(System.currentTimeMillis(), "Permissions: Background access granted", LogLevel.SUCCESS))
+            } else {
+                onLog(LogEntry(System.currentTimeMillis(), "Permissions: Background denied. EFB will stop when screen off.", LogLevel.WARN))
+            }
             startNavigation()
         }
     }
@@ -131,21 +190,20 @@ class MainActivity : AppCompatActivity(), FusionListener, SensorEventListener {
         sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
             onLog(LogEntry(System.currentTimeMillis(), "IMU: Accelerometer initialised", LogLevel.SUCCESS))
-        } ?: onLog(LogEntry(System.currentTimeMillis(), "IMU: Accelerometer MISSING", LogLevel.ERROR))
+        }
 
         sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
             onLog(LogEntry(System.currentTimeMillis(), "IMU: Gyroscope initialised", LogLevel.SUCCESS))
-        } ?: onLog(LogEntry(System.currentTimeMillis(), "IMU: Gyroscope MISSING", LogLevel.WARN))
+        }
 
         sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
-        } ?: onLog(LogEntry(System.currentTimeMillis(), "IMU: Magnetometer MISSING", LogLevel.WARN))
+        }
 
         sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
-            onLog(LogEntry(System.currentTimeMillis(), "BARO: Barometer initialised", LogLevel.SUCCESS))
-        } ?: onLog(LogEntry(System.currentTimeMillis(), "BARO: Barometer MISSING", LogLevel.WARN))
+        }
 
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L).build()
         val locationCallback = object : LocationCallback() {
@@ -156,20 +214,14 @@ class MainActivity : AppCompatActivity(), FusionListener, SensorEventListener {
 
         try {
             fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
-                loc?.let {
-                    onLog(LogEntry(System.currentTimeMillis(), "GPS: Initialised from Fused cache", LogLevel.SUCCESS))
-                    engine.onGpsLocation(it, 0)
-                }
+                loc?.let { engine.onGpsLocation(it, 0) }
             }
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
-            onLog(LogEntry(System.currentTimeMillis(), "GPS: Requesting Google Fused Fix", LogLevel.INFO))
-        } catch (e: SecurityException) {
-            onLog(LogEntry(System.currentTimeMillis(), "GPS Permission denied", LogLevel.ERROR))
-        }
+        } catch (e: SecurityException) {}
     }
 
     private fun vibrate(durationMs: Long) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
         } else {
             @Suppress("DEPRECATION")
@@ -178,104 +230,17 @@ class MainActivity : AppCompatActivity(), FusionListener, SensorEventListener {
     }
 
     override fun onTelemetryUpdate(data: TelemetryData) {
-        binding.navigationMap.updateTelemetry(data)
-        
-        runOnUiThread {
-            //show force start button if no fix
-            if (data.northingM == 0.0 && data.eastingM == 0.0) {
-                binding.btnForceStart.visibility = android.view.View.VISIBLE
-            } else {
-                binding.btnForceStart.visibility = android.view.View.GONE
-            }
-
-            val (lat, lon) = engine.toGlobal(data.northingM, data.eastingM)
-            binding.txtCoords.text = "LAT: %.6f LON: %.6f".format(lat, lon)
-            binding.txtAlt.text = "ALT: %.1fm (Δ %.1fm)".format(data.altitudeMSL, data.altitudeDeltaM)
-            binding.txtMode.text = "MODE: ${data.mode.displayName}"
-            binding.txtMode.setTextColor(data.mode.color)
-            binding.txtUncertainty.text = "UNCERTAINTY: %.1fm".format(data.positionUncertaintyM)
-            
-            //ekf diagnostics
-            val x = data.ekfStateX
-            binding.txtEkfState.text = "N: %.1f E: %.1f\nA: %.1f H: %.1f\nV: %.2f".format(x[0], x[1], x[2], Math.toDegrees(x[3]), x[4])
-            
-            val p = data.ekfCovP
-            binding.txtEkfCov.text = "pos: ±%.1fm\nalt: ±%.1fm\nhdg: ±%.1f°\nspd: ±%.2fm/s".format(
-                Math.sqrt(p[0] + p[1]), Math.sqrt(p[2]), Math.toDegrees(Math.sqrt(p[3])), Math.sqrt(p[4])
-            )
-            
-            //sensor status hud updates
-            updateSensorStatus(data)
-            
-            val gp = GeoPoint(lat, lon)
-            if (posMarker == null) {
-                posMarker = Marker(binding.map)
-                posMarker?.title = "TrueNorth"
-                posMarker?.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                binding.map.overlays.add(posMarker)
-            }
-            posMarker?.position = gp
-            binding.map.controller.animateTo(gp)
-        }
-    }
-
-    private fun updateSensorStatus(data: TelemetryData) {
-        val okColor = android.graphics.Color.parseColor("#00FF88")
-        val warnColor = android.graphics.Color.parseColor("#FFB300")
-        val errorColor = android.graphics.Color.RED
-
-        //imu status: ready if gyro/mag are alive
-        if (data.confidence.imu > 0.1) {
-            binding.statusImu.text = "IMU [ACTIVE]"
-            binding.statusImu.setTextColor(okColor)
-        } else {
-            binding.statusImu.text = "IMU [READY]"
-            binding.statusImu.setTextColor(okColor)
-        }
-
-        //baro status
-        if (data.confidence.barometer > 0.5) {
-            binding.statusBaro.text = "BARO [LOCK]"
-            binding.statusBaro.setTextColor(okColor)
-        } else {
-            binding.statusBaro.text = "BARO [OFF]"
-            binding.statusBaro.setTextColor(errorColor)
-        }
-
-        //cell status
-        if (data.visibleCells > 0) {
-            binding.statusCell.text = "CELL [${data.visibleCells} TWR]"
-            binding.statusCell.setTextColor(if (data.confidence.cellDoppler > 0.1) okColor else warnColor)
-        } else {
-            binding.statusCell.text = "CELL [NO SIG]"
-            binding.statusCell.setTextColor(errorColor)
-        }
+        viewModel.updateTelemetry(data)
     }
 
     override fun onPathPoint(point: PathPoint) {
-        binding.navigationMap.addPathPoint(point)
-        runOnUiThread {
-            val (lat, lon) = engine.toGlobal(point.northM, point.eastM)
-            val gp = GeoPoint(lat, lon)
-            if (point.isGpsActual) {
-                actualPathLine.addPoint(gp)
-            } else {
-                predictedPathLine.addPoint(gp)
-            }
-            binding.map.invalidate()
-        }
+        viewModel.addPathPoint(point)
     }
 
-    override fun onModeChange(newMode: NavigationMode, reason: String) {
-        //handled by telemetryupdate and mapview
-    }
+    override fun onModeChange(newMode: NavigationMode, reason: String) {}
 
     override fun onLog(entry: LogEntry) {
-        runOnUiThread {
-            val currentText = binding.logView.text.toString()
-            val newText = "[${entry.level}] ${entry.message}\n$currentText"
-            binding.logView.text = newText.take(500)
-        }
+        viewModel.addLog(entry)
     }
 
     override fun onStepDetected() {
@@ -292,16 +257,6 @@ class MainActivity : AppCompatActivity(), FusionListener, SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    override fun onResume() {
-        super.onResume()
-        binding.map.onResume()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        binding.map.onPause()
-    }
 
     override fun onDestroy() {
         super.onDestroy()

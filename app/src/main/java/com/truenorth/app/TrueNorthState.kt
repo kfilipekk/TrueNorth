@@ -73,7 +73,19 @@ data class TelemetryData(
     val gpsSatellites: Int = 0,
     val timestamp: Long = System.currentTimeMillis(),
     val ekfStateX: DoubleArray = DoubleArray(5),
-    val ekfCovP: DoubleArray = DoubleArray(5) //diagonal elements of p
+    val ekfCovP: DoubleArray = DoubleArray(5), //diagonal elements of p
+    val rawSensors: RawSensorSnapshot = RawSensorSnapshot(), //added for detailed logging
+    val vibrationLevel: Double = 0.0, //rolling variance of accel magnitude
+    val cadenceHz: Double = 0.0,
+    val stepLengthM: Double = 0.0,
+    val baroResidualM: Double = 0.0,
+    val magResidualDeg: Double = 0.0,
+    val wifiScans: Int = 0,
+    val bestWifiRssi: Int = -127,
+    val lat: Double = 0.0,
+    val lon: Double = 0.0,
+    val gpsNorthingM: Double = 0.0,
+    val gpsEastingM: Double = 0.0
 )
 
 //path recording
@@ -84,7 +96,11 @@ data class PathPoint(
     val timestamp: Long,
     val mode: NavigationMode,
     val uncertaintyM: Double = 0.0,
-    val isGpsActual: Boolean = false //distinguish actual vs predicted
+    val isGpsActual: Boolean = false, //distinguish actual vs predicted
+    val lat: Double = 0.0,
+    val lon: Double = 0.0,
+    val gpsNorthingM: Double = 0.0,
+    val gpsEastingM: Double = 0.0
 )
 
 //cell observation

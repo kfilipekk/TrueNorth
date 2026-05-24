@@ -29,6 +29,10 @@ class StepDetector(private val onStep: (stepLengthM: Double, speedMps: Double) -
     //weinberg constant (average human)
     private val K_WEINBERG = 0.45
 
+    private var lastStepLength = 0.0
+
+    fun getLastStepLength() = lastStepLength
+
     //process a raw imu sample
     fun processSample(ax: Float, ay: Float, az: Float, timestampMs: Long) {
         //filter gravity
@@ -63,6 +67,7 @@ class StepDetector(private val onStep: (stepLengthM: Double, speedMps: Double) -
                 
                 //weinberg formula for step length
                 val stepLen = K_WEINBERG * (cyclePeak - cycleTrough).pow(0.25)
+                lastStepLength = stepLen
                 
                 recentIntervals.addLast(interval)
                 if (recentIntervals.size > 5) recentIntervals.removeFirst()
