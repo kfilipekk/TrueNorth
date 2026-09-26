@@ -1,0 +1,19 @@
+# Local configuration — never commit
+local.properties
+
+# Generated artifacts — never commit
+commit_log.txt
+generate_history.ps1
+
+# Build outputs
+.gradle/
+.kotlin/
+build/
+app/build/
+
+# IDE
+.idea/
+
+# Vendored Gradle distributions (use the wrapper instead)
+gradle_portable/
+gradle_8_5/
